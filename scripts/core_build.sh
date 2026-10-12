@@ -302,6 +302,38 @@ echo "CC $CC"
 echo ${CMAKE_CMD}
 ${CMAKE_CMD} -G "${CMAKE_GENERATOR}"
 
+# TEMPORARY: inspect ErrorCode from the pinned milvus-common package.
+ref=$(grep -oE 'milvus-common/[0-9][^"]*' \
+    "${ROOT_DIR}/internal/core/conanfile.py" | head -1)
+
+pid=$(conan list "$ref:*" 2>/dev/null \
+    | grep -oE '\b[a-f0-9]{40}\b' | head -1 || true)
+
+header=""
+if [[ -n "$pid" ]]; then
+    pkg_dir=$(conan cache path "$ref:$pid" 2>/dev/null || true)
+    if [[ -n "$pkg_dir" ]]; then
+        header=$(find "$pkg_dir" \
+            -path '*/common/EasyAssert.h' -print -quit)
+    fi
+fi
+
+if [[ -z "$header" || ! -f "$header" ]]; then
+    header="${ROOT_DIR}/internal/core/output/include/common/EasyAssert.h"
+fi
+
+echo "=== milvus-common ref: ${ref} ==="
+echo "=== EasyAssert header: ${header} ==="
+
+if [[ ! -f "$header" ]]; then
+    echo "ERROR: Could not locate the pinned EasyAssert.h"
+    exit 1
+fi
+
+grep -n -B 8 -A 35 -E \
+    'enum[[:space:]]+(class[[:space:]]+)?ErrorCode|ConfigInvalid' \
+    "$header"
+
 # Export PROTOC for Rust crates (e.g. lance-encoding) that need it at build time
 if [ -z "$PROTOC" ]; then
   _PROTOC=$(grep -m1 "^Protobuf_PROTOC_EXECUTABLE" CMakeCache.txt 2>/dev/null | cut -d= -f2-)
@@ -311,7 +343,17 @@ if [ -z "$PROTOC" ]; then
   fi
 fi
 
-if [[ ${RUN_CPPLINT} == "ON" ]]; then
+if [[ -n "${CORE_BUILD_TARGET:-}" ]]; then
+    if [[ "$CMAKE_GENERATOR" != "Ninja" ]]; then
+        echo "CORE_BUILD_TARGET requires Ninja."
+        exit 1
+    fi
+
+    echo "Compiling only: ${CORE_BUILD_TARGET}"
+    ninja -t clean "${CORE_BUILD_TARGET}" || exit 1
+    ninja -j "${jobs}" -v "${CORE_BUILD_TARGET}" || exit 1
+
+elif [[ ${RUN_CPPLINT} == "ON" ]]; then
   if [ "$CMAKE_GENERATOR" = "Ninja" ]; then
     BUILD_CMD="ninja"
   else

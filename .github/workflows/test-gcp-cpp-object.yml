@@ -1,0 +1,25 @@
+
+name: Test GCP C++ Object Only
+
+on:
+  workflow_dispatch:
+
+jobs:
+  compile:
+    runs-on: ubuntu-22.04
+    env:
+      ENABLE_GCP_NATIVE: "ON"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compile the failing C++ object
+        run: |
+          ./build/builder.sh bash -lc '
+            set -euo pipefail
+
+            export CORE_BUILD_TARGET="src/storage/gcp-native-storage/CMakeFiles/gcp-native-storage.dir/GcpNativeClientManager.cpp.o"
+
+            make build-cpp
+          '
