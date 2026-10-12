@@ -4,17 +4,38 @@ name: Test GCP C++ Object Only
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   compile:
     runs-on: ubuntu-22.04
+
     env:
       ENABLE_GCP_NATIVE: "ON"
 
     steps:
-      - name: Checkout
+      - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Compile the failing C++ object
+      - name: Prepare cache directories
+        run: |
+          mkdir -p .docker
+          mkdir -p cmake_build/thirdparty
+          mkdir -p cmake_build/3rdparty_download
+
+      - name: Restore Milvus dependency cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .docker/
+            cmake_build/thirdparty/
+            cmake_build/3rdparty_download/
+          key: ${{ runner.os }}-${{ runner.arch }}-milvus-gcp-deps-${{ hashFiles('internal/core/conanfile.py', 'internal/core/CMakeLists.txt', 'docker-compose.yml', 'build/docker/builder/**') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-milvus-gcp-deps-
+
+      - name: Compile only the failing C++ object
         run: |
           ./build/builder.sh bash -lc '
             set -euo pipefail
